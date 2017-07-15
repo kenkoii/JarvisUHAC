@@ -11,6 +11,7 @@ const apiAIApp = apiai("4908574ffef54ac4a5e4509fba4ec58e");
 const currencies = [];
 const branchLocations = [];
 const atmLocations = [];
+const billerIds = ['ELEC', 'TELCO', 'LOANS', 'SCHOOL', 'WATER', 'CABLE'];
 
 const users = {};
 
@@ -104,10 +105,18 @@ function receivedMessageEvent(event) {
             console.log('\nAction: ', action);
             const aiMessage = response.result.fulfillment.speech;
             users[sender] = users[sender] || {};
-            if (users[sender].status === 'askacctnumber') {
+            users[sender].status = users[sender].status || [];
+            console.log(`\n\n\n\n\n Status: ${users[sender].status}`);
+            console.log(`\n\n\n\n\n Top of stack ${users[sender].status[users[sender].status.length - 1]}`);
+            if (users[sender].status[users[sender].status.length - 1] === 'askacctnumber') {
                 accountInfo = getAccountInfo(sender, message);
                 // console.log('\n\n\n\n\n\n\n\n\n ACCOUNT INFO: ', accountInfo);
                 // sendTextMessage(sender, JSON.stringify(accountInfo));
+            } else if (users[sender].status[users[sender].status.length - 1] === 'askAmount') {
+                makePayment(sender, message);
+            } else if (users[sender].status[users[sender].status.length - 1] === 'paybills') {
+                users[sender].status.push('askAmount');
+                sendTextMessage(sender, 'How much would you like to pay?');
             } else {
                 switch (action) {
                     case 'location':
@@ -155,7 +164,7 @@ function receivedMessageEvent(event) {
                                 }
                                 return quickReply;
                             });
-                            sendChoiceButton(sender, quickReplies);
+                            sendChoiceButton(sender, quickReplies, "Here are the list of currencies with available data:");
                         }
                         break;
                     case 'info.account':
@@ -164,12 +173,31 @@ function receivedMessageEvent(event) {
                         if (parameters.currency_name) {
 
                         } else {
-                            users[sender] = {
-                                status: 'askacctnumber'
-                            };
+                            // users[sender].status = 'askacctnumber';
+                            users[sender].status = users[sender].status || [];
+                            users[sender].status.push('askacctnumber');
                             sendTextMessage(sender, "What is your account number?");
                         }
-                        break
+                        break;
+                    case 'info.bills':
+                        console.log('\nResponse: ', response);
+                        console.log('\n\n\n\n\n\n\n\n\nParameters: ' + JSON.stringify(parameters));
+                        let quickReplies = billerIds.map((billerId) => {
+                            const quickReply = {
+                                "content_type": "text",
+                                "title": billerId,
+                                "payload": "billerId"
+                            }
+                            return quickReply;
+                        });
+                        users[sender] = users[sender] || []
+                        // users[sender] = users[sender] || {}
+                        // users[sender].status = 'askbillerId';
+                        users[sender].status.push('paybills');
+                        users[sender].status.push('askbillerId');
+                        
+                        sendChoiceButton(sender, quickReplies, 'Here are available billers');
+                        break;
                     default:
                         sendTextMessage(sender, aiMessage);
                         console.log(`\n\n\n\n\n\n SMALL TALK HANDLER \n\n\n\n\n\n`);
@@ -250,7 +278,7 @@ function receivedPayloadEvent(event) {
 }
 
 function receivedQuickReplyEvent(event) {
-    var senderID = event.sender.id;
+    var sender = event.sender.id;
     var recipientID = event.recipient.id;
     var timeOfMessage = event.timestamp;
     var message = event.message;
@@ -269,21 +297,38 @@ function receivedQuickReplyEvent(event) {
             if (result) {
                 var currency = {
                     title: result.symbol,
-                    subtitle: result.name + `\n Buying: ${result.buying} \n Selling: ${result.selling}`,
-                    // item_url: "https://www.oculus.com/en-us/rift/",
-                    // image_url: "http://messengerdemo.parseapp.com/img/rift.png",
-                    // buttons: [{
-                    //     type: "web_url",
-                    //     url: "https://www.oculus.com/en-us/rift/",
-                    //     title: "Open Web URL"
-                    // }, {
-                    //     type: "postback",
-                    //     title: "Call Postback",
-                    //     payload: "Payload for first bubble",
-                    // }],
+                    subtitle: result.name + `\n Buying: ${result.buying} \n Selling: ${result.selling}`
                 }
-                sendGenericMessage(senderID, currency);
+                sendGenericMessage(sender, currency);
                 // sendTextMessage(senderID, `buying: 38.276, \nselling: 39.877,`);
+            }
+            break;
+        case 'billerId':
+            // {   channel_id: 'UHAC_TEAM',
+            //     source_account: 'XXXXXXXXXXX1',
+            //     source_currency: 'PHP',
+            //     biller_id: 'ELEC',
+            //     reference1: 'sample string 1',
+            //     reference2: 'sample string 2',
+            //     reference3: 'sample string 3',
+            //     amount: 9 }
+            users[sender] = users[sender] || {};
+            // if (users[sender].status === 'askbillerId') {
+            //     accountInfo = getAccountInfo(sender, message);
+            //     // console.log('\n\n\n\n\n\n\n\n\n ACCOUNT INFO: ', accountInfo);
+            //     // sendTextMessage(sender, JSON.stringify(accountInfo));
+            // }
+            users[sender].billerId = messageText;
+            console.log(users[sender]);
+            if (users[sender].accountNumber) {
+                // users[sender].status = 'askAmount';
+                users[sender].status = users[sender].status || [];
+                users[sender].status.push('askAmount');
+                sendTextMessage(sender, 'How much would you like to pay?');
+            } else {
+                users[sender].status = users[sender].status || [];
+                users[sender].status.push('askacctnumber');
+                sendTextMessage(sender, 'What is your account number?');
             }
             break;
         default:
@@ -292,17 +337,19 @@ function receivedQuickReplyEvent(event) {
 
 }
 
-function sendChoiceButton(recipientId, quickReplies) {
+function sendChoiceButton(sender, quickReplies, text) {
     console.log(JSON.stringify(quickReplies));
     var messageData = {
         recipient: {
-            id: recipientId
+            id: sender
         },
         message: {
-            text: "What do you want to know?",
+            text: text,
             quick_replies: quickReplies
         }
     };
+    users[sender].status = users[sender].status || [];
+    users[sender].status.pop();
     console.log("sendChoiceButton: ", messageData);
     callSendAPI(messageData);
 }
@@ -402,8 +449,53 @@ function sendLocationButton(recipientId) {
     callSendAPI(messageData);
 }
 
+function makePayment(sender, amount) {
+    console.log('\n\n\n\n\n\n ACCOUNT NUMBER: ' + users[sender].accountNumber);
+    console.log('\n\n\n\n\n\n AMOUNT: ' + amount);
+    var options = {
+        method: 'POST',
+        url: `https://api-uat.unionbankph.com/uhac/sandbox/payments/initiate`,
+        headers: {
+            accept: 'application/json',
+            'x-ibm-client-secret': 'P3lI2dG6hP0dJ1kQ5fD4jE4cF4yW8eU1gP0eK7aU4hM0nV8jA6',
+            'x-ibm-client-id': '7abd6419-deff-4ae4-8ccb-65ad5032b51c'
+        },
+        body: {
+            channel_id: "UHAC_TEAM",
+            source_account: users[sender].accountNumber,
+            transaction_id: " " + (Math.floor(Math.random() * 1500)),
+            source_currency: "PHP",
+            biller_id: users[sender].billerId,
+            reference1: "sample string 1",
+            reference2: "sample string 2",
+            reference3: "sample string 3",
+            amount: amount
+        },
+        json: true
+    };
+
+    request(options, function (error, response, body) {
+        if (error) return console.error('Failed: %s', error.message);
+        console.log(`\n\n\n\n\n\n Response: ${response.body}`)
+        let jsonbody = response.body;
+        console.log('\n\n\n\n\n\n API RESPONSE: ' + JSON.stringify(jsonbody));
+        if(jsonbody.status === 'S') {
+            
+            sendTextMessage(sender, 'Payment successful, updated account info:');
+            getAccountInfo(sender, users[sender].accountNumber);
+        } else {
+            sendTextMessage(sender, 'Payment unsuccessful, no money deducted from account.');
+        }
+        // return jsonbody[0];
+        users[sender].status = users[sender].status || []
+        // users[sender].status = 'default';
+        users[sender].status.pop();
+        // sendTextMessage(sender, JSON.stringify(jsonbody[0]));
+    });
+}
+
 function getAccountInfo(sender, accountNumber) {
-    console.log('\n\n\n\n\n\n ACCOUNT NUMBER: '+ accountNumber);
+    console.log('\n\n\n\n\n\n ACCOUNT NUMBER: ' + accountNumber);
     var options = {
         method: 'GET',
         url: `https://api-uat.unionbankph.com/uhac/sandbox/accounts/${accountNumber}`,
@@ -417,26 +509,17 @@ function getAccountInfo(sender, accountNumber) {
     request(options, function (error, response, body) {
         if (error) return console.error('Failed: %s', error.message);
         let jsonbody = JSON.parse(response.body);
-        console.log('\n\n\n\n\n\n API RESPONSE: '+ JSON.stringify(jsonbody[0]));
+        console.log('\n\n\n\n\n\n API RESPONSE: ' + JSON.stringify(jsonbody[0]));
         // return jsonbody[0];
         var accountInfo = {
             title: jsonbody[0].account_name,
             subtitle: `\n Account Number: ${jsonbody[0].account_no} \nAvailable: ${jsonbody[0].avaiable_balance} \nCurrent:  ${jsonbody[0].current_balance}`,
-            // item_url: "https://www.oculus.com/en-us/rift/",
-            image_url: jsonbody[0].status==='ACTIVE'?"https://cdn.pixabay.com/photo/2017/01/13/01/22/ok-1976099_1280.png":"https://cdn.pixabay.com/photo/2017/02/12/21/29/false-2061131_1280.png",
-            // buttons: [{
-            //     type: "web_url",
-            //     url: "https://www.oculus.com/en-us/rift/",
-            //     title: "Open Web URL"
-            // }, {
-            //     type: "postback",
-            //     title: "Call Postback",
-            //     payload: "Payload for first bubble",
-            // }],
+            image_url: jsonbody[0].status === 'ACTIVE' ? "https://cdn.pixabay.com/photo/2017/01/13/01/22/ok-1976099_1280.png" : "https://cdn.pixabay.com/photo/2017/02/12/21/29/false-2061131_1280.png",
         }
-        users[sender] = {
-            status: 'normal'
-        };
+        users[sender].accountNumber = jsonbody[0].account_no;
+        // users[sender].status = 'default';
+        users[sender].status = users[sender].status || [];
+        users[sender].status.pop();
         sendGenericMessage(sender, accountInfo);
         // sendTextMessage(sender, JSON.stringify(jsonbody[0]));
     });
