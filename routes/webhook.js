@@ -23,7 +23,7 @@ app.get('/', (req, res) => {
 });
 
 app.post('/', (req, res) => {
-    // console.log(req.body);
+    console.log(req.body);
     if (currencies.length === 0) {
         getCurrencies();
         // helpers.getCurrencies;
@@ -108,19 +108,32 @@ function receivedMessageEvent(event) {
                     // const aiMessage = response.result.fulfillment.speech;
                     // sendTextMessage(sender, aiMessage);
                     console.log('\n\n\n\n\n\n\n\n\nParameters: ' + JSON.stringify(parameters));
-                    // if(parameters.location == 'ATM') {
-                    //    
-                    // } else {
-
-                    // }
-                    sendLocationButton(sender)
+                    if (parameters) {
+                        if (parameters.location.city) {
+                            console.log('\n\n\n\n\n\n\n\n\n BRANCH!!!');
+                            console.log('\n\n\n\n\n\n\n\n\n ' + branchLocations)
+                            let elements = [];
+                            for (var i = 0; i < 4; i++) {
+                                if (branchLocations[i]) {
+                                    var lat = branchLocations[i].latitude;
+                                    var long = branchLocations[i].longitude;
+                                    elements.push({
+                                        "title": branchLocations[i].name,
+                                        "subtitle": branchLocations[i].address,
+                                        "image_url": "https://maps.googleapis.com/maps/api/staticmap?key=" + "AIzaSyC6zxnPD-pVU174ETFz8ihEqvn9wExnTNM" +
+                                            "&markers=color:red|label:B|" + lat + "," + long + "&size=360x360&zoom=13"
+                                    });
+                                }
+                            }
+                            sendMapsMessage(sender, elements)
+                        }
+                    } else {
+                        sendLocationButton(sender)
+                    }
                     break;
                 case 'info.forex':
                     console.log('\nResponse: ', response);
                     console.log('\n\n\n\n\n\n\n\n\nParameters: ' + JSON.stringify(parameters));
-                    // const aiMessage = response.result.fulfillment.speech;
-                    // sendTextMessage(sender, aiMessage);
-                    // sendLocationButton(sender)
                     if (parameters.currency_name) {
                         var result = currencies.filter(function (currency) {
                             return currency.symbol == parameters.currency_name;
@@ -128,21 +141,9 @@ function receivedMessageEvent(event) {
                         if (result) {
                             var currency = {
                                 title: result.symbol,
-                                subtitle: result.name + `\n Buying: ${result.buying} \n Selling: ${result.selling}`,
-                                // item_url: "https://www.oculus.com/en-us/rift/",
-                                // image_url: "http://messengerdemo.parseapp.com/img/rift.png",
-                                // buttons: [{
-                                //     type: "web_url",
-                                //     url: "https://www.oculus.com/en-us/rift/",
-                                //     title: "Open Web URL"
-                                // }, {
-                                //     type: "postback",
-                                //     title: "Call Postback",
-                                //     payload: "Payload for first bubble",
-                                // }],
+                                subtitle: result.name + `\n Buying: ${result.buying} \n Selling: ${result.selling}`
                             }
                             sendGenericMessage(sender, currency);
-                            // sendTextMessage(senderID, `buying: 38.276, \nselling: 39.877,`);
                         }
                     } else {
                         let quickReplies = currencies.map((currency) => {
@@ -261,6 +262,24 @@ function sendChoiceButton(recipientId, quickReplies) {
     callSendAPI(messageData);
 }
 
+
+function sendMapsMessage(recipientId, elements) {
+    var messageData = {
+        recipient: {
+            id: recipientId
+        },
+        message: {
+            attachment: {
+                type: "template",
+                payload: {
+                    template_type: "generic",
+                    elements: elements
+                }
+            }
+        }
+    };
+    callSendAPI(messageData);
+}
 
 function sendGenericMessage(recipientId, element) {
     const elements = [];
@@ -399,7 +418,7 @@ function getBranchLocations() {
         jsonbody.forEach((branchLocation) => {
             branchLocations.push(branchLocation);
         });
-        console.log(`\n\n\n NANAY SULOD SI ATMLOCATIONS \n\n\n`);
+        console.log(`\n\n\n NANAY SULOD SI BRANCHLOCATIONS \n\n\n`);
     });
 }
 
