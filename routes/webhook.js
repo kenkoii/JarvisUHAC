@@ -103,12 +103,11 @@ function receivedMessageEvent(event) {
             var action = result.action;
             console.log('\nAction: ', action);
             const aiMessage = response.result.fulfillment.speech;
-            if (users[sender]) {
-                if (users[sender].status === 'askacctnumber') {
-                    accountInfo = getAccountInfo(sender, message);
-                    // console.log('\n\n\n\n\n\n\n\n\n ACCOUNT INFO: ', accountInfo);
-                    // sendTextMessage(sender, JSON.stringify(accountInfo));
-                }
+            users[sender] = users[sender] || {};
+            if (users[sender].status === 'askacctnumber') {
+                accountInfo = getAccountInfo(sender, message);
+                // console.log('\n\n\n\n\n\n\n\n\n ACCOUNT INFO: ', accountInfo);
+                // sendTextMessage(sender, JSON.stringify(accountInfo));
             } else {
                 switch (action) {
                     case 'location':
@@ -435,6 +434,9 @@ function getAccountInfo(sender, accountNumber) {
             //     payload: "Payload for first bubble",
             // }],
         }
+        users[sender] = {
+            status: 'normal'
+        };
         sendGenericMessage(sender, accountInfo);
         // sendTextMessage(sender, JSON.stringify(jsonbody[0]));
     });
