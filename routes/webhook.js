@@ -12,6 +12,8 @@ const currencies = [];
 const branchLocations = [];
 const atmLocations = [];
 
+const users = {};
+
 
 // Facebook
 app.get('/', (req, res) => {
@@ -101,71 +103,80 @@ function receivedMessageEvent(event) {
             var action = result.action;
             console.log('\nAction: ', action);
             const aiMessage = response.result.fulfillment.speech;
-            switch (action) {
-                case 'location':
-                    // CALL UNIONBANK API HERE
-                    console.log('\n\n\n\n\n\n\n\n\nResponse: ', response);
-                    // const aiMessage = response.result.fulfillment.speech;
-                    // sendTextMessage(sender, aiMessage);
-                    console.log('\n\n\n\n\n\n\n\n\nParameters: ' + JSON.stringify(parameters));
-                    if (parameters) {
-                        if (parameters.location.city) {
-                            console.log('\n\n\n\n\n\n\n\n\n BRANCH!!!');
-                            console.log('\n\n\n\n\n\n\n\n\n ' + branchLocations)
-                            let elements = [];
-                            for (var i = 0; i < 4; i++) {
-                                if (branchLocations[i]) {
-                                    var lat = branchLocations[i].latitude;
-                                    var long = branchLocations[i].longitude;
-                                    elements.push({
-                                        "title": branchLocations[i].name,
-                                        "subtitle": branchLocations[i].address,
-                                        "image_url": "https://maps.googleapis.com/maps/api/staticmap?key=" + "AIzaSyC6zxnPD-pVU174ETFz8ihEqvn9wExnTNM" +
-                                            "&markers=color:red|label:B|" + lat + "," + long + "&size=360x360&zoom=13"
-                                    });
+            if (users[sender]) {
+                if (users[sender].status === 'askacctnumber') {
+                    accountInfo = getAccountInfo(sender, message);
+                    // console.log('\n\n\n\n\n\n\n\n\n ACCOUNT INFO: ', accountInfo);
+                    // sendTextMessage(sender, JSON.stringify(accountInfo));
+                }
+            } else {
+                switch (action) {
+                    case 'location':
+                        // CALL UNIONBANK API HERE
+                        console.log('\n\n\n\n\n\n\n\n\nResponse: ', response);
+                        // const aiMessage = response.result.fulfillment.speech;
+                        // sendTextMessage(sender, aiMessage);
+                        console.log('\n\n\n\n\n\n\n\n\nParameters: ' + JSON.stringify(parameters));
+                        if (parameters) {
+                            if (parameters.location.city) {
+                                console.log('\n\n\n\n\n\n\n\n\n BRANCH!!!');
+                                console.log('\n\n\n\n\n\n\n\n\n ' + branchLocations)
+                                sendBranches(sender);
+                            } else if (parameters.location) {
+                                if (parameters.location['business-name'] == 'ATM') {
+                                    sendATMLocations(sender);
+                                } else {
+                                    sendBranches(sender);
                                 }
                             }
-                            sendMapsMessage(sender, elements)
+                        } else {
+                            sendLocationButton(sender)
                         }
-                    } else {
-                        sendLocationButton(sender)
-                    }
-                    break;
-                case 'info.forex':
-                    console.log('\nResponse: ', response);
-                    console.log('\n\n\n\n\n\n\n\n\nParameters: ' + JSON.stringify(parameters));
-                    if (parameters.currency_name) {
-                        var result = currencies.filter(function (currency) {
-                            return currency.symbol == parameters.currency_name;
-                        })[0];
-                        if (result) {
-                            var currency = {
-                                title: result.symbol,
-                                subtitle: result.name + `\n Buying: ${result.buying} \n Selling: ${result.selling}`
+                        break;
+                    case 'info.forex':
+                        console.log('\nResponse: ', response);
+                        console.log('\n\n\n\n\n\n\n\n\nParameters: ' + JSON.stringify(parameters));
+                        if (parameters.currency_name) {
+                            var result = currencies.filter(function (currency) {
+                                return currency.symbol == parameters.currency_name;
+                            })[0];
+                            if (result) {
+                                var currency = {
+                                    title: result.symbol,
+                                    subtitle: result.name + `\n Buying: ${result.buying} \n Selling: ${result.selling}`
+                                }
+                                sendGenericMessage(sender, currency);
                             }
-                            sendGenericMessage(sender, currency);
+                        } else {
+                            let quickReplies = currencies.map((currency) => {
+                                const quickReply = {
+                                    "content_type": "text",
+                                    "title": currency.symbol,
+                                    "payload": "currency"
+                                }
+                                return quickReply;
+                            });
+                            sendChoiceButton(sender, quickReplies);
                         }
-                    } else {
-                        let quickReplies = currencies.map((currency) => {
-                            const quickReply = {
-                                "content_type": "text",
-                                "title": currency.symbol,
-                                "payload": "currency"
-                            }
-                            return quickReply;
-                        });
-                        sendChoiceButton(sender, quickReplies);
-                    }
-                    break;
-                default:
-                    sendTextMessage(sender, aiMessage);
-                    console.log(`\n\n\n\n\n\n SMALL TALK HANDLER \n\n\n\n\n\n`);
-            }
-            if (action == 'location.atm') {
+                        break;
+                    case 'info.account':
+                        console.log('\nResponse: ', response);
+                        console.log('\n\n\n\n\n\n\n\n\nParameters: ' + JSON.stringify(parameters));
+                        if (parameters.currency_name) {
 
-            } else {
-
+                        } else {
+                            users[sender] = {
+                                status: 'askacctnumber'
+                            };
+                            sendTextMessage(sender, "What is your account number?");
+                        }
+                        break
+                    default:
+                        sendTextMessage(sender, aiMessage);
+                        console.log(`\n\n\n\n\n\n SMALL TALK HANDLER \n\n\n\n\n\n`);
+                }
             }
+
         });
 
         apiai.on('error', (error) => {
@@ -175,6 +186,41 @@ function receivedMessageEvent(event) {
         apiai.end();
     }
 
+}
+
+
+function sendATMLocations(sender) {
+    let elements = [];
+    for (var i = 0; i < 4; i++) {
+        if (atmLocations[i]) {
+            var lat = atmLocations[i].latitude;
+            var long = atmLocations[i].longitude;
+            elements.push({
+                "title": atmLocations[i].name,
+                "subtitle": atmLocations[i].address,
+                "image_url": "https://maps.googleapis.com/maps/api/staticmap?key=" + "AIzaSyC6zxnPD-pVU174ETFz8ihEqvn9wExnTNM" +
+                    "&markers=color:red|label:B|" + lat + "," + long + "&size=360x360&zoom=13"
+            });
+        }
+    }
+    sendMapsMessage(sender, elements)
+}
+
+function sendBranches(sender) {
+    let elements = [];
+    for (var i = 0; i < 4; i++) {
+        if (branchLocations[i]) {
+            var lat = branchLocations[i].latitude;
+            var long = branchLocations[i].longitude;
+            elements.push({
+                "title": branchLocations[i].name,
+                "subtitle": branchLocations[i].address,
+                "image_url": "https://maps.googleapis.com/maps/api/staticmap?key=" + "AIzaSyC6zxnPD-pVU174ETFz8ihEqvn9wExnTNM" +
+                    "&markers=color:red|label:B|" + lat + "," + long + "&size=360x360&zoom=13"
+            });
+        }
+    }
+    sendMapsMessage(sender, elements)
 }
 
 function receivedPayloadEvent(event) {
@@ -355,6 +401,43 @@ function sendLocationButton(recipientId) {
     };
     console.log("sendLocationButton: ", messageData);
     callSendAPI(messageData);
+}
+
+function getAccountInfo(sender, accountNumber) {
+    console.log('\n\n\n\n\n\n ACCOUNT NUMBER: '+ accountNumber);
+    var options = {
+        method: 'GET',
+        url: `https://api-uat.unionbankph.com/uhac/sandbox/accounts/${accountNumber}`,
+        headers: {
+            accept: 'application/json',
+            'x-ibm-client-secret': 'P3lI2dG6hP0dJ1kQ5fD4jE4cF4yW8eU1gP0eK7aU4hM0nV8jA6',
+            'x-ibm-client-id': '7abd6419-deff-4ae4-8ccb-65ad5032b51c'
+        }
+    };
+
+    request(options, function (error, response, body) {
+        if (error) return console.error('Failed: %s', error.message);
+        let jsonbody = JSON.parse(response.body);
+        console.log('\n\n\n\n\n\n API RESPONSE: '+ JSON.stringify(jsonbody[0]));
+        // return jsonbody[0];
+        var accountInfo = {
+            title: jsonbody[0].account_name,
+            subtitle: `\n Account Number: ${jsonbody[0].account_no} \nAvailable: ${jsonbody[0].avaiable_balance} \nCurrent:  ${jsonbody[0].current_balance}`,
+            // item_url: "https://www.oculus.com/en-us/rift/",
+            image_url: jsonbody[0].status==='ACTIVE'?"https://cdn.pixabay.com/photo/2017/01/13/01/22/ok-1976099_1280.png":"https://cdn.pixabay.com/photo/2017/02/12/21/29/false-2061131_1280.png",
+            // buttons: [{
+            //     type: "web_url",
+            //     url: "https://www.oculus.com/en-us/rift/",
+            //     title: "Open Web URL"
+            // }, {
+            //     type: "postback",
+            //     title: "Call Postback",
+            //     payload: "Payload for first bubble",
+            // }],
+        }
+        sendGenericMessage(sender, accountInfo);
+        // sendTextMessage(sender, JSON.stringify(jsonbody[0]));
+    });
 }
 
 function getCurrencies() {
