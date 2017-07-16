@@ -114,9 +114,15 @@ function receivedMessageEvent(event) {
                 // sendTextMessage(sender, JSON.stringify(accountInfo));
             } else if (users[sender].status[users[sender].status.length - 1] === 'askAmount') {
                 makePayment(sender, message);
+            } else if (users[sender].status[users[sender].status.length - 1] === 'askTransferAmount') {
+                makeTransfer(sender, message);
             } else if (users[sender].status[users[sender].status.length - 1] === 'paybills') {
                 users[sender].status.push('askAmount');
                 sendTextMessage(sender, 'How much would you like to pay?');
+            } else if (users[sender].status[users[sender].status.length - 1] === 'asktargetacctnumber') {
+                users[sender].transferAcct = message;
+                users[sender].status.push('askTransferAmount');
+                sendTextMessage(sender, 'How much would you like to transfer?');
             } else {
                 switch (action) {
                     case 'location':
@@ -195,9 +201,16 @@ function receivedMessageEvent(event) {
                         // users[sender].status = 'askbillerId';
                         users[sender].status.push('paybills');
                         users[sender].status.push('askbillerId');
-                        
+
                         sendChoiceButton(sender, quickReplies, 'Here are available billers');
                         break;
+                    case 'info.fund':
+                        console.log('\nResponse: ', response);
+                        console.log('\n\n\n\n\n\n\n\n\nParameters: ' + JSON.stringify(parameters));
+                        // users[sender].status = 'askacctnumber';
+                        users[sender].status = users[sender].status || [];
+                        users[sender].status.push('asktargetacctnumber');
+                        sendTextMessage(sender, "What is the target account number to transfer funds to?");
                     default:
                         sendTextMessage(sender, aiMessage);
                         console.log(`\n\n\n\n\n\n SMALL TALK HANDLER \n\n\n\n\n\n`);
@@ -449,6 +462,52 @@ function sendLocationButton(recipientId) {
     callSendAPI(messageData);
 }
 
+function makeTransfer(sender, amount) {
+    console.log('\n\n\n\n\n\n ACCOUNT NUMBER: ' + users[sender].accountNumber);
+    console.log('\n\n\n\n\n\n TARGET ACCT NUMBER: ' + users[sender].transferAcct);
+    console.log('\n\n\n\n\n\n AMOUNT: ' + amount);
+
+    var options = {
+        method: 'POST',
+        url: 'https://api-uat.unionbankph.com/uhac/sandbox/transfers/initiate',
+        headers: {
+            accept: 'application/json',
+            'content-type': 'application/json',
+            'x-ibm-client-secret': 'P3lI2dG6hP0dJ1kQ5fD4jE4cF4yW8eU1gP0eK7aU4hM0nV8jA6',
+            'x-ibm-client-id': '7abd6419-deff-4ae4-8ccb-65ad5032b51c'
+        },
+        body: {
+            channel_id: 'UHAC_TEAM',
+            transaction_id: " " + (Math.floor(Math.random() * 1500)),
+            source_account: users[sender].accountNumber,
+            source_currency: 'PHP',
+            target_account: users[sender].transferAcct,
+            target_currency: 'PHP',
+            amount: amount
+        },
+        json: true
+    };
+
+    request(options, function (error, response, body) {
+        if (error) return console.error('Failed: %s', error.message);
+        console.log(`\n\n\n\n\n\n Response: ${response.body}`)
+        let jsonbody = response.body;
+        console.log('\n\n\n\n\n\n API RESPONSE: ' + JSON.stringify(jsonbody));
+        if (jsonbody.status === 'S') {
+
+            sendTextMessage(sender, 'Payment successful, updated account info:');
+            getAccountInfo(sender, users[sender].accountNumber);
+        } else {
+            sendTextMessage(sender, 'Payment unsuccessful, no money deducted from account.');
+        }
+        // return jsonbody[0];
+        users[sender].status = users[sender].status || []
+        // users[sender].status = 'default';
+        users[sender].status.pop();
+        // sendTextMessage(sender, JSON.stringify(jsonbody[0]));
+    });
+}
+
 function makePayment(sender, amount) {
     console.log('\n\n\n\n\n\n ACCOUNT NUMBER: ' + users[sender].accountNumber);
     console.log('\n\n\n\n\n\n AMOUNT: ' + amount);
@@ -479,8 +538,8 @@ function makePayment(sender, amount) {
         console.log(`\n\n\n\n\n\n Response: ${response.body}`)
         let jsonbody = response.body;
         console.log('\n\n\n\n\n\n API RESPONSE: ' + JSON.stringify(jsonbody));
-        if(jsonbody.status === 'S') {
-            
+        if (jsonbody.status === 'S') {
+
             sendTextMessage(sender, 'Payment successful, updated account info:');
             getAccountInfo(sender, users[sender].accountNumber);
         } else {
